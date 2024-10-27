@@ -34,7 +34,7 @@ import com.google.android.gms.nearby.connection.PayloadTransferUpdate
 import com.google.android.gms.nearby.connection.Strategy.P2P_STAR
 
 
-class AvailableDevicesActivity : AppCompatActivity() {
+class RnDActivity : AppCompatActivity() {
 
     private lateinit var connectionsClient: ConnectionsClient
     private lateinit var binding: ActivityAvailableDevicesBinding
@@ -93,19 +93,19 @@ class AvailableDevicesActivity : AppCompatActivity() {
         ConnectionLifecycleCallback() {
         override fun onConnectionInitiated(endpointId: String, info: ConnectionInfo) {
             binding.tvStatus.text = "Status onConnectionInitiated"
-            AlertDialog.Builder(this@AvailableDevicesActivity)
+            AlertDialog.Builder(this@RnDActivity)
                 .setTitle("Accept connection to " + info.endpointName)
                 .setMessage("Confirm the code matches on both devices: " + info.authenticationDigits)
                 .setPositiveButton(
                     "Accept"
                 ) { _: DialogInterface?, _: Int ->  // The user confirmed, so we can accept the connection.
-                    Nearby.getConnectionsClient(this@AvailableDevicesActivity)
+                    Nearby.getConnectionsClient(this@RnDActivity)
                         .acceptConnection(endpointId, payloadCallback)
                 }
                 .setNegativeButton(
                     android.R.string.cancel
                 ) { _: DialogInterface?, _: Int ->  // The user canceled, so we should reject the connection.
-                    Nearby.getConnectionsClient(this@AvailableDevicesActivity).rejectConnection(endpointId)
+                    Nearby.getConnectionsClient(this@RnDActivity).rejectConnection(endpointId)
                 }
                 .setIcon(android.R.drawable.ic_dialog_alert)
                 .show()
@@ -174,7 +174,7 @@ class AvailableDevicesActivity : AppCompatActivity() {
 
     private fun showMessage(msg: String) {
         Toast.makeText(
-            this@AvailableDevicesActivity,
+            this@RnDActivity,
             msg,
             Toast.LENGTH_LONG
         ).show()
