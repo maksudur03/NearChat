@@ -43,6 +43,7 @@ class ChatSessionActivity : AppCompatActivity() {
     private var selectedOpponent: Pair<String, String>? = null
     private lateinit var usersAdapter: UsersAdapter
     private lateinit var viewModel: ChatViewModel
+    private lateinit var loadingDialog: AlertDialog
 
     private val discoveryCallback = object : EndpointDiscoveryCallback() {
         override fun onEndpointFound(endpointId: String, info: DiscoveredEndpointInfo) {
@@ -73,12 +74,14 @@ class ChatSessionActivity : AppCompatActivity() {
 
     private val advertiseCallback = object : ConnectionLifecycleCallback() {
         override fun onConnectionInitiated(endpointId: String, info: ConnectionInfo) {
+            loadingDialog.dismiss()
             AlertDialog.Builder(this@ChatSessionActivity)
                 .setTitle("Accept connection to ${info.endpointName}")
                 .setMessage("Confirm the code matches on both devices: " + info.authenticationDigits)
                 .setPositiveButton(
                     "Accept"
                 ) { _: DialogInterface?, _: Int ->
+                    loadingDialog.show()
                     connectionsClient.acceptConnection(endpointId, payloadCallback).
                             addOnFailureListener {
                                 showMessage("acceptConnection failed")
@@ -89,6 +92,7 @@ class ChatSessionActivity : AppCompatActivity() {
                 ) { _: DialogInterface?, _: Int ->
                     connectionsClient.rejectConnection(endpointId)
                 }
+                .setCancelable(false)
                 .setIcon(android.R.drawable.ic_dialog_alert)
                 .show()
         }
@@ -97,6 +101,7 @@ class ChatSessionActivity : AppCompatActivity() {
             if (result.status.statusCode == STATUS_OK) {
                 selectedOpponent = availableDevices.find { pair -> pair.first == endpointId }
                 selectedOpponent?.let { opponent ->
+                    loadingDialog.dismiss()
                     showChatScreen(opponent.second)
                 }
             }
@@ -111,6 +116,7 @@ class ChatSessionActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityChatSessionBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        createLoadingDialog()
         userName = intent.getStringExtra(KEY_NAME) ?: ""
         connectionsClient = Nearby.getConnectionsClient(this)
         binding.scOnline.setOnCheckedChangeListener { _, isChecked ->
@@ -134,6 +140,7 @@ class ChatSessionActivity : AppCompatActivity() {
             usersAdapter =
                 UsersAdapter(availableDevices, object : UsersAdapter.OnUserSelectListener {
                     override fun onUserSelected(userId: String) {
+                        loadingDialog.show()
                         connectionsClient.requestConnection(
                             userName,
                             userId,
@@ -234,6 +241,14 @@ class ChatSessionActivity : AppCompatActivity() {
         supportFragmentManager.beginTransaction()
             .replace(R.id.flCategoriesContainer, ChatFragment.newInstance(opponentName))
             .commit()
+    }
+
+    private fun createLoadingDialog() {
+        val builder = AlertDialog.Builder(this)
+        builder.setView(R.layout.progress_dialog)
+        builder.setCancelable(false)
+
+        loadingDialog = builder.create()
     }
 
     companion object {
