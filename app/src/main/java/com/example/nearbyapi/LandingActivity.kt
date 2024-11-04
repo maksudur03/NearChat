@@ -86,8 +86,12 @@ class LandingActivity : AppCompatActivity() {
     }
 
     private fun arePermissionsGranted(): Boolean {
-        return requiredPermissions.all { permission ->
-            checkSelfPermission(this, permission) == PERMISSION_GRANTED
+        return if (SDK_INT > Build.VERSION_CODES.P) {
+            requiredPermissions.all { permission ->
+                checkSelfPermission(this, permission) == PERMISSION_GRANTED
+            }
+        } else {
+            checkSelfPermission(this, ACCESS_FINE_LOCATION) == PERMISSION_GRANTED
         }
     }
 
