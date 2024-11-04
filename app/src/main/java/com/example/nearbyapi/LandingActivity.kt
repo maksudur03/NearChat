@@ -6,15 +6,16 @@ import android.Manifest.permission.BLUETOOTH_ADVERTISE
 import android.Manifest.permission.BLUETOOTH_CONNECT
 import android.Manifest.permission.BLUETOOTH_SCAN
 import android.Manifest.permission.NEARBY_WIFI_DEVICES
-import android.content.Intent
 import android.content.pm.PackageManager.PERMISSION_GRANTED
+import android.os.Build
+import android.os.Build.VERSION.SDK_INT
 import android.os.Bundle
 import android.view.View.GONE
 import android.view.View.VISIBLE
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
+import androidx.core.content.ContextCompat.checkSelfPermission
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.isVisible
 import com.example.nearbyapi.databinding.ActivityLandingBinding
@@ -37,8 +38,12 @@ class LandingActivity : AppCompatActivity() {
         registerForActivityResult(
             ActivityResultContracts.RequestMultiplePermissions()
         ) { permissions ->
-            val allPermissionsGranted = permissions.entries.all { entry ->
-                entry.value
+            val allPermissionsGranted = if (SDK_INT > Build.VERSION_CODES.P) {
+                permissions.entries.all { entry ->
+                    entry.value
+                }
+            } else {
+                checkSelfPermission(this, ACCESS_FINE_LOCATION) == PERMISSION_GRANTED
             }
             if (allPermissionsGranted) {
                 showCreateNameSegment()
@@ -82,7 +87,7 @@ class LandingActivity : AppCompatActivity() {
 
     private fun arePermissionsGranted(): Boolean {
         return requiredPermissions.all { permission ->
-            ContextCompat.checkSelfPermission(this, permission) == PERMISSION_GRANTED
+            checkSelfPermission(this, permission) == PERMISSION_GRANTED
         }
     }
 

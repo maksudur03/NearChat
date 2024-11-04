@@ -79,7 +79,10 @@ class ChatSessionActivity : AppCompatActivity() {
                 .setPositiveButton(
                     "Accept"
                 ) { _: DialogInterface?, _: Int ->
-                    connectionsClient.acceptConnection(endpointId, payloadCallback)
+                    connectionsClient.acceptConnection(endpointId, payloadCallback).
+                            addOnFailureListener {
+                                showMessage("acceptConnection failed")
+                            }
                 }
                 .setNegativeButton(
                     android.R.string.cancel
