@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Near Chat</string>
+    <string name="you_are_online">You are Online</string>
 </resources>

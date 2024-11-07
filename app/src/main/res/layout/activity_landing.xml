@@ -66,6 +66,7 @@
             android:background="@drawable/bg_name_box"
             android:gravity="center"
             android:hint="Type Name"
+            android:text="1-mun"
             android:inputType="textPersonName"
             android:maxLength="20"
             android:textColor="@color/white"

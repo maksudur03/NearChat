@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools" >
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.BLUETOOTH" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
@@ -12,6 +12,9 @@
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE"/>
 
     <application
         android:allowBackup="true"
@@ -22,14 +25,19 @@
         android:roundIcon="@drawable/ic_near_chat"
         android:supportsRtl="true"
         android:theme="@style/Theme.NearbyApi"
-        tools:targetApi="31" >
+        tools:targetApi="31">
+        <service
+            android:name=".NearbyConnectService"
+            android:permission="android.permission.FOREGROUND_SERVICE"
+            android:foregroundServiceType="connectedDevice" />
+
         <activity
             android:name=".ChatSessionActivity"
             android:exported="false" />
         <activity
             android:name=".LandingActivity"
             android:exported="true"
-            android:theme="@style/Theme.NearbyApi.Splash" >
+            android:theme="@style/Theme.NearbyApi.Splash">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 

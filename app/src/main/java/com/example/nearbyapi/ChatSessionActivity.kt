@@ -1,114 +1,74 @@
 package com.example.nearbyapi
 
 import android.app.AlertDialog
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.NotificationManager.IMPORTANCE_DEFAULT
+import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Context
 import android.content.DialogInterface
 import android.content.Intent
+import android.content.IntentFilter
+import android.content.ServiceConnection
+import android.os.Build.VERSION.SDK_INT
+import android.os.Build.VERSION_CODES.O
 import android.os.Bundle
-import android.view.MotionEvent
+import android.os.IBinder
 import android.view.View.GONE
 import android.view.View.VISIBLE
-import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
 import androidx.lifecycle.ViewModelProvider
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView.VERTICAL
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import com.example.nearbyapi.Utils.BG_NOTIFICATION_CHANNEL_ID
 import com.example.nearbyapi.databinding.ActivityChatSessionBinding
-import com.google.android.gms.nearby.Nearby
-import com.google.android.gms.nearby.connection.AdvertisingOptions
-import com.google.android.gms.nearby.connection.ConnectionInfo
-import com.google.android.gms.nearby.connection.ConnectionLifecycleCallback
-import com.google.android.gms.nearby.connection.ConnectionResolution
-import com.google.android.gms.nearby.connection.ConnectionsClient
-import com.google.android.gms.nearby.connection.ConnectionsStatusCodes.STATUS_OK
-import com.google.android.gms.nearby.connection.DiscoveredEndpointInfo
-import com.google.android.gms.nearby.connection.DiscoveryOptions
-import com.google.android.gms.nearby.connection.EndpointDiscoveryCallback
-import com.google.android.gms.nearby.connection.Payload
-import com.google.android.gms.nearby.connection.PayloadCallback
-import com.google.android.gms.nearby.connection.PayloadTransferUpdate
-import com.google.android.gms.nearby.connection.Strategy.P2P_POINT_TO_POINT
-import com.google.android.gms.nearby.connection.Strategy.P2P_STAR
 
 class ChatSessionActivity : AppCompatActivity() {
 
     private var userName = ""
-    private lateinit var connectionsClient: ConnectionsClient
     private lateinit var binding: ActivityChatSessionBinding
-    private val strategy = P2P_STAR
     private val availableDevices = ArrayList<Pair<String, String>>()
     private var selectedOpponent: Pair<String, String>? = null
     private lateinit var usersAdapter: UsersAdapter
     private lateinit var viewModel: ChatViewModel
     private lateinit var loadingDialog: AlertDialog
+    private var connectionService: NearbyConnectService? = null
 
-    private val discoveryCallback = object : EndpointDiscoveryCallback() {
-        override fun onEndpointFound(endpointId: String, info: DiscoveredEndpointInfo) {
-            if (availableDevices.contains(Pair(endpointId, info.endpointName))) {
-                return
-            }
-            availableDevices.add(Pair(endpointId, info.endpointName))
-            usersAdapter.notifyDataSetChanged()
+    private val serviceConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            val binder = service as NearbyConnectService.NearbyBinder
+            connectionService = binder.getService()
         }
 
-        override fun onEndpointLost(endpointId: String) {
-            availableDevices.remove(availableDevices.find { pair -> pair.first == endpointId })
-            usersAdapter.notifyDataSetChanged()
+        override fun onServiceDisconnected(name: ComponentName?) {
+            connectionService = null
         }
     }
 
-    private val payloadCallback = object : PayloadCallback() {
-        override fun onPayloadReceived(endpointId: String, payload: Payload) {
-            payload.asBytes()?.let {
-                viewModel.onReceivedMessage(String(it))
+    private val connectionStatusReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.getBooleanExtra("IS_CONNECTED", false) == true) {
+                showChatScreen("1-")
+            } else {
+                removeChatScreen()
             }
-        }
-
-        override fun onPayloadTransferUpdate(endpointId: String, update: PayloadTransferUpdate) {
-
         }
     }
 
-    private val advertiseCallback = object : ConnectionLifecycleCallback() {
-        override fun onConnectionInitiated(endpointId: String, info: ConnectionInfo) {
-            loadingDialog.dismiss()
-            AlertDialog.Builder(this@ChatSessionActivity)
-                .setTitle("Accept connection to ${info.endpointName}")
-                .setMessage("Confirm the code matches on both devices: " + info.authenticationDigits)
-                .setPositiveButton(
-                    "Accept"
-                ) { _: DialogInterface?, _: Int ->
-                    loadingDialog.show()
-                    connectionsClient.acceptConnection(endpointId, payloadCallback).
-                            addOnFailureListener {
-                                showMessage("acceptConnection failed")
-                            }
-                }
-                .setNegativeButton(
-                    android.R.string.cancel
-                ) { _: DialogInterface?, _: Int ->
-                    connectionsClient.rejectConnection(endpointId)
-                }
-                .setCancelable(false)
-                .setIcon(android.R.drawable.ic_dialog_alert)
-                .show()
-        }
-
-        override fun onConnectionResult(endpointId: String, result: ConnectionResolution) {
-            if (result.status.statusCode == STATUS_OK) {
-                selectedOpponent = availableDevices.find { pair -> pair.first == endpointId }
-                selectedOpponent?.let { opponent ->
-                    loadingDialog.dismiss()
-                    showChatScreen(opponent.second)
-                }
+    private val messageReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            intent?.getStringExtra("MESSAGE")?.let { message ->
+                val list = ArrayList<Pair<Boolean, String>>()
+                list.add((Pair(false, message)))
+                viewModel.addSessionMessages(list)
             }
-        }
 
-        override fun onDisconnected(endpointId: String) {
-            resetConnections()
+            intent?.getStringExtra("TOAST")?.let { message ->
+                showMessage(message)
+            }
         }
     }
 
@@ -116,48 +76,41 @@ class ChatSessionActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityChatSessionBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        createNotificationChannel()
         createLoadingDialog()
         userName = intent.getStringExtra(KEY_NAME) ?: ""
-        connectionsClient = Nearby.getConnectionsClient(this)
+
+        binding.scOnline.isChecked = NearbyConnectService.isServiceActive
         binding.scOnline.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
                 binding.scOnline.text = "Online"
-                startAdvertising()
-                startDiscovery()
+                NearbyConnectService.userName = userName
+                startService(Intent(this, NearbyConnectService::class.java))
+                bindService(
+                    Intent(this, NearbyConnectService::class.java),
+                    serviceConnection,
+                    Context.BIND_AUTO_CREATE
+                )
+                LocalBroadcastManager.getInstance(this).run {
+                    registerReceiver(connectionStatusReceiver, IntentFilter("CONNECTION_STATUS"))
+                    registerReceiver(messageReceiver, IntentFilter("MESSAGE_RECEIVED"))
+                }
             } else {
                 binding.scOnline.text = "Offline"
+                NearbyConnectService.userName = ""
                 availableDevices.clear()
-                usersAdapter.notifyDataSetChanged()
-                connectionsClient.apply {
-                    stopAdvertising()
-                    stopDiscovery()
-                    stopAllEndpoints()
+                stopService((Intent(this, NearbyConnectService::class.java)))
+                unbindService(serviceConnection)
+                LocalBroadcastManager.getInstance(this).run {
+                    unregisterReceiver(connectionStatusReceiver)
+                    unregisterReceiver(messageReceiver)
                 }
             }
-        }
-        binding.rvUsers.apply {
-            layoutManager = LinearLayoutManager(this@ChatSessionActivity, VERTICAL, false)
-            usersAdapter =
-                UsersAdapter(availableDevices, object : UsersAdapter.OnUserSelectListener {
-                    override fun onUserSelected(userId: String) {
-                        loadingDialog.show()
-                        connectionsClient.requestConnection(
-                            userName,
-                            userId,
-                            advertiseCallback
-                        ).addOnFailureListener {
-                            showMessage("Connection Request Failed")
-                        }
-                    }
-                })
-            adapter = usersAdapter
         }
         viewModel = ViewModelProvider(this)[ChatViewModel::class.java]
 
         viewModel.sendMessage.observe(this) { msg ->
-            selectedOpponent?.let { opponent ->
-                connectionsClient.sendPayload(opponent.first, Payload.fromBytes(msg.toByteArray()))
-            }
+            connectionService?.sendMessage(msg)
         }
         viewModel.onBackPressed.observe(this) {
             dismissChatFragment()
@@ -170,6 +123,31 @@ class ChatSessionActivity : AppCompatActivity() {
                 }
             }
         })
+        if (NearbyConnectService.userName.isNotEmpty()) {
+            showChatScreen("1-")
+            connectionService?.run { viewModel.addSessionMessages(getMessages()) }
+            bindService(
+                Intent(this, NearbyConnectService::class.java),
+                serviceConnection,
+                Context.BIND_AUTO_CREATE
+            )
+            LocalBroadcastManager.getInstance(this).run {
+                registerReceiver(connectionStatusReceiver, IntentFilter("CONNECTION_STATUS"))
+                registerReceiver(messageReceiver, IntentFilter("MESSAGE_RECEIVED"))
+            }
+        }
+    }
+
+    private fun createNotificationChannel() {
+        if (SDK_INT >= O) {
+            val channel = NotificationChannel(
+                BG_NOTIFICATION_CHANNEL_ID,
+                "Connect Service Channel",
+                IMPORTANCE_DEFAULT
+            )
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(channel)
+        }
     }
 
     private fun dismissChatFragment() {
@@ -178,10 +156,8 @@ class ChatSessionActivity : AppCompatActivity() {
             .setPositiveButton(
                 "Yes"
             ) { _: DialogInterface?, _: Int ->  // The user confirmed, so we can accept the connection.
-                selectedOpponent?.let { opponent ->
-                    connectionsClient.disconnectFromEndpoint(opponent.first)
-                }
-                resetConnections()
+                connectionService?.endChat()
+                removeChatScreen()
             }
             .setNegativeButton(
                 "No"
@@ -191,41 +167,9 @@ class ChatSessionActivity : AppCompatActivity() {
             .show()
     }
 
-
-    override fun onStop() {
-        connectionsClient.apply {
-            stopAdvertising()
-            stopDiscovery()
-            stopAllEndpoints()
-        }
-        binding.scOnline.isChecked = false
-        super.onStop()
-    }
-
-    private fun startDiscovery() {
-        val options = DiscoveryOptions.Builder().setStrategy(strategy).build()
-        connectionsClient.startDiscovery(packageName, discoveryCallback, options)
-            .addOnFailureListener { exception -> showMessage("Discovery Failed ${exception.message}") }
-    }
-
-    private fun startAdvertising() {
-        val options = AdvertisingOptions.Builder().setStrategy(strategy).build()
-        connectionsClient.startAdvertising(userName, packageName, advertiseCallback, options)
-            .addOnFailureListener { showMessage("Advertising Failed") }
-    }
-
-    private fun resetConnections() {
+    private fun removeChatScreen() {
         viewModel.onSessionEnded()
         binding.flCategoriesContainer.visibility = GONE
-        availableDevices.clear()
-        usersAdapter.notifyDataSetChanged()
-        connectionsClient.apply {
-            stopAdvertising()
-            stopDiscovery()
-            stopAllEndpoints()
-            startAdvertising()
-            startDiscovery()
-        }
     }
 
     private fun showMessage(msg: String) {
@@ -252,7 +196,7 @@ class ChatSessionActivity : AppCompatActivity() {
     }
 
     companion object {
-        private const val KEY_NAME = "KEY_USER_NAME"
+        const val KEY_NAME = "KEY_USER_NAME"
         fun newInstance(context: Context, userName: String): Intent {
             return Intent(context, ChatSessionActivity::class.java).apply {
                 putExtra(KEY_NAME, userName)

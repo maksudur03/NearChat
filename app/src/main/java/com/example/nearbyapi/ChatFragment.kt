@@ -52,6 +52,10 @@ class ChatFragment : Fragment() {
             messages.clear()
             adapter.notifyDataSetChanged()
         }
+        viewModel.sessionMessages.observe(requireActivity()) { msgList ->
+            messages.addAll(0, msgList)
+            adapter.notifyDataSetChanged()
+        }
 
         binding?.run {
             toolbar.title = arguments?.getString(KEY_OPPONENT_NAME) ?: ""

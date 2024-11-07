@@ -36,4 +36,11 @@ class ChatViewModel : ViewModel() {
     fun onSessionEnded() {
         _onSessionEnd.value = Unit
     }
+
+    private val _sessionMessages = MutableLiveData<ArrayList<Pair<Boolean, String>>>()
+    val sessionMessages: LiveData<ArrayList<Pair<Boolean, String>>> get() = _sessionMessages
+
+    fun addSessionMessages(msgList: ArrayList<Pair<Boolean, String>>) {
+        _sessionMessages.value = msgList
+    }
 }

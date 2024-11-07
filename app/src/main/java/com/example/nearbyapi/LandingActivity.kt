@@ -66,21 +66,25 @@ class LandingActivity : AppCompatActivity() {
     }
 
     private fun initView() {
-        if (arePermissionsGranted()) {
-            showCreateNameSegment()
-        }
-        binding.btnAction.setOnClickListener {
-            if (binding.llCreateName.isVisible) {
-                val name = binding.etName.text.toString().trim()
-                if (name.isEmpty()) {
-                    showMessage("Please type your name")
-                    binding.etName.requestFocus()
-                    return@setOnClickListener
+        if (NearbyConnectService.isServiceActive) {
+            startActivity(ChatSessionActivity.newInstance(this, NearbyConnectService.userName))
+        } else {
+            if (arePermissionsGranted()) {
+                showCreateNameSegment()
+            }
+            binding.btnAction.setOnClickListener {
+                if (binding.llCreateName.isVisible) {
+                    val name = binding.etName.text.toString().trim()
+                    if (name.isEmpty()) {
+                        showMessage("Please type your name")
+                        binding.etName.requestFocus()
+                        return@setOnClickListener
+                    }
+                    finish()
+                    startActivity(ChatSessionActivity.newInstance(this, name))
+                } else {
+                    requestPermissionLauncher.launch(requiredPermissions)
                 }
-                finish()
-                startActivity(ChatSessionActivity.newInstance(this, name))
-            } else {
-                requestPermissionLauncher.launch(requiredPermissions)
             }
         }
     }
