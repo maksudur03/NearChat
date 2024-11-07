@@ -10,12 +10,14 @@ import android.os.Binder
 import android.os.Build.VERSION.SDK_INT
 import android.os.Build.VERSION_CODES.N
 import android.os.Build.VERSION_CODES.Q
-import android.os.Handler
 import android.os.IBinder
-import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import com.example.nearbyapi.NearbyConnectService.State.ADVERTISING
+import com.example.nearbyapi.NearbyConnectService.State.CONNECTED
+import com.example.nearbyapi.NearbyConnectService.State.DISCOVERING
+import com.example.nearbyapi.NearbyConnectService.State.UNKNOWN
 import com.example.nearbyapi.Utils.BG_NOTIFICATION_CHANNEL_ID
 import com.example.nearbyapi.Utils.FOREGROUND_NOTIFICATION_REQUEST_CODE
 import com.example.nearbyapi.Utils.getNotificationUpdateCurrentFlags
@@ -40,13 +42,20 @@ import com.google.android.gms.nearby.connection.Strategy.P2P_STAR
  */
 class NearbyConnectService : Service() {
 
-    private val strategy = P2P_CLUSTER
-    private val pendingDevices = HashMap<String, String>()// List of all connected endpoints
+    private var state = UNKNOWN
+    private val strategy = P2P_STAR
+
+    private val discoveredDevices = HashMap<String, Endpoint>()
+    private val pendingDevices = HashMap<String, Endpoint>()
+    private val connectedDevices = HashMap<String, Endpoint>()
+
+    private var isConnecting = false
+    private var isDiscovering = false
+    private var isAdvertising = false
+
     private lateinit var connectionsClient: ConnectionsClient
     private val binder = NearbyBinder()
-    private var connectedEndpointId: String? = null
     private var messages = ArrayList<Pair<Boolean, String>>()
-    private var isConnectionOngoing = false
 
     inner class NearbyBinder : Binder() {
         fun getService(): NearbyConnectService = this@NearbyConnectService
@@ -59,12 +68,7 @@ class NearbyConnectService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        connectionsClient.run {
-            stopAdvertising()
-            stopDiscovery()
-            stopAllEndpoints()
-
-        }
+        setState(UNKNOWN)
         isServiceActive = false
     }
 
@@ -74,8 +78,11 @@ class NearbyConnectService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         connectionsClient = Nearby.getConnectionsClient(this)
-        startAdvertising()
-        startDiscovery()
+        if (userName.contains("S")) {
+            setState(ADVERTISING)
+        } else {
+            setState(DISCOVERING)
+        }
         startAtForeGround()
         return START_STICKY
     }
@@ -112,77 +119,112 @@ class NearbyConnectService : Service() {
 
     private fun startAdvertising() {
         println("connect catch startAdvertising")
+        isAdvertising = true
         val options = AdvertisingOptions.Builder().setStrategy(strategy).build()
         connectionsClient.startAdvertising(userName, packageName, advertiseCallback, options)
-            .addOnCompleteListener {
-                println("connect catch  complete startAdvertising")
-            }
             .addOnFailureListener { broadcastToastMessage("Advertising Failed") }
     }
 
-    private fun startDiscovery() {
+    private val advertiseCallback = object : ConnectionLifecycleCallback() {
+        override fun onConnectionInitiated(endpointId: String, connectionInfo: ConnectionInfo) {
+            println("connect catch onConnectionInitiated $endpointId")
+            val endpoint = Endpoint(endpointId, connectionInfo.endpointName)
+            pendingDevices[endpointId] = endpoint
+            onConnectionInitiated(endpointId)
+        }
+
+        override fun onConnectionResult(endpointId: String, result: ConnectionResolution) {
+            println("connect catch onConnectionResult ${result.status.isSuccess} $endpointId")
+            isConnecting = false
+            val endpoint = pendingDevices.remove(endpointId)
+            if (result.status.isSuccess) {
+                if (endpoint != null) {
+                    connectedToEndpoint(endpoint)
+                }
+                broadcastConnectionStatus(true)
+            } else {
+                onConnectionFailed()
+                broadcastConnectionStatus(false)
+            }
+        }
+
+        override fun onDisconnected(endpointId: String) {
+            println("connect catch onDisconnected")
+            connectedDevices.remove(endpointId)
+            if (connectedDevices.isEmpty()) {
+                setState(DISCOVERING)
+            }
+        }
+    }
+
+    private fun onConnectionInitiated(endpointId: String) {
+        connectionsClient.acceptConnection(endpointId, payloadCallback)
+            .addOnFailureListener { exception ->
+                broadcastToastMessage("Accept Connection Failed $exception")
+            }
+    }
+
+    private fun connectedToEndpoint(endpoint: Endpoint) {
+        connectedDevices[endpoint.id] = endpoint
+        setState(CONNECTED)
+    }
+
+    private fun stopAdvertising() {
+        isAdvertising = false
+        connectionsClient.stopAdvertising()
+    }
+
+    private fun startDiscovering() {
         println("connect catch startDiscovery")
+        isDiscovering = true
+        discoveredDevices.clear()
         val options = DiscoveryOptions.Builder().setStrategy(strategy).build()
         connectionsClient.startDiscovery(packageName, discoveryCallback, options)
-            .addOnCompleteListener {
-                println("connect catch  complete Discovery")
+            .addOnFailureListener { exception ->
+                isDiscovering = false
+                broadcastToastMessage("Discovery Failed ${exception.message}")
             }
-            .addOnFailureListener { exception -> broadcastToastMessage("Discovery Failed ${exception.message}") }
     }
 
     private val discoveryCallback = object : EndpointDiscoveryCallback() {
         override fun onEndpointFound(endpointId: String, info: DiscoveredEndpointInfo) {
             println("connect catch onEndpointFound $endpointId ${info.endpointName}")
-            if (pendingDevices.isEmpty()) {
-                if (info.endpointName.startsWith("1-")) {
-                    pendingDevices[endpointId] = info.endpointName
-                }
-                requestConnectionToDevice(endpointId)
-            } else {
-                pendingDevices.forEach { device ->
-                    if (device.key == endpointId && device.value == info.endpointName) {
-                        return
-                    } else if (device.key == endpointId && device.value != info.endpointName) {
-                        pendingDevices[endpointId] = info.endpointName
-                    }
-                    else if (device.key != endpointId && device.value == info.endpointName) {
-                        pendingDevices.remove(device.key)
-                        pendingDevices[endpointId] = info.endpointName
-                    } else {
-                        if (info.endpointName.startsWith("1-")) {
-                            pendingDevices[endpointId] = info.endpointName
-                        }
-                        if (!isConnectionOngoing) {
-                            requestConnectionToDevice(endpointId)
-                        }
-                    }
+            if (info.endpointName.contains("1-")) {
+                val endpoint = Endpoint(endpointId, info.endpointName)
+                discoveredDevices[endpointId] = endpoint
+                if (!isConnecting) {
+                    connectToEndpoint(endpoint)
                 }
             }
         }
 
         override fun onEndpointLost(endpointId: String) {
             println("connect catch onEndpointLost")
-
-            //connectedEndpointIds.remove(endpointId)
-            isConnectionOngoing = false
-            connectionsClient.disconnectFromEndpoint(endpointId)
-            pendingDevices.remove(endpointId)// Remove from list if disconnected
-            broadcastConnectionStatus(false)
         }
     }
 
-    private fun requestConnectionToDevice(endpointId: String) {
-        isConnectionOngoing = true
-        connectionsClient.requestConnection(userName, endpointId, advertiseCallback)
-            .addOnSuccessListener {
-                broadcastToastMessage("ConnectionSuccess $endpointId")
-            }
+    private fun connectToEndpoint(endpoint: Endpoint) {
+        isConnecting = true
+        connectionsClient
+            .requestConnection(userName, endpoint.id, advertiseCallback)
             .addOnFailureListener { exception ->
-                isConnectionOngoing = false
-                connectionsClient.disconnectFromEndpoint(endpointId)
+                isConnecting = false
+                onConnectionFailed()
                 println("connect catch onEndpointFound fail  $exception")
-                broadcastToastMessage("R c F $exception")
+                broadcastToastMessage("request connection fail $exception")
             }
+    }
+
+    private fun stopDiscovering() {
+        isDiscovering = false
+        connectionsClient.stopDiscovery()
+    }
+
+    private fun onConnectionFailed() {
+        // Let's try someone else.
+        if (state == DISCOVERING && discoveredDevices.isNotEmpty()) {
+            connectToEndpoint(discoveredDevices.values.toList()[0])
+        }
     }
 
     private val payloadCallback = object : PayloadCallback() {
@@ -198,42 +240,39 @@ class NearbyConnectService : Service() {
         }
     }
 
-    private val advertiseCallback = object : ConnectionLifecycleCallback() {
-        override fun onConnectionInitiated(endpointId: String, connectionInfo: ConnectionInfo) {
-            println("connect catch onConnectionInitiated $endpointId")
-            connectionsClient.acceptConnection(endpointId, payloadCallback)
-                .addOnCompleteListener {
-                    println("connect catch acceptConnection complete $endpointId")
+    private fun setState(newState: State) {
+        if (state == newState) {
+            return
+        }
+        when (newState) {
+            DISCOVERING -> {
+                if (isAdvertising) {
+                    stopAdvertising()
                 }
-                .addOnFailureListener { exception ->
-                    broadcastToastMessage("Accept Connection Failed $exception")
+                disconnectFromAllEndpoints()
+                startDiscovering()
+            }
+            ADVERTISING -> {
+                if (isDiscovering) {
+                    stopDiscovering()
                 }
-            connectedEndpointId = endpointId
-            //connectedEndpointIds.add(endpointId)
-        }
-
-        override fun onConnectionResult(endpointId: String, result: ConnectionResolution) {
-            println("connect catch onConnectionResult ${result.status.isSuccess} $endpointId")
-            if (result.status.isSuccess) {
-                broadcastConnectionStatus(true)
-            } else {
-                broadcastConnectionStatus(false)
+                disconnectFromAllEndpoints()
+                startAdvertising()
             }
-            isConnectionOngoing = false
-            pendingDevices.remove(endpointId)
-            if (pendingDevices.size > 0) {
-                requestConnectionToDevice(pendingDevices.keys.toList()[0])
+            CONNECTED -> if (isDiscovering) {
+                stopDiscovering()
             }
+            UNKNOWN -> stopAllEndpoints()
         }
+    }
 
-        override fun onDisconnected(endpointId: String) {
-            println("connect catch onDisconnected")
-            //connectedEndpointIds.remove(endpointId)
-            if (pendingDevices.size > 0) {
-                requestConnectionToDevice(pendingDevices.keys.toList()[0])
-            }// Remove from list if disconnected
-            broadcastConnectionStatus(false)
-        }
+    private fun stopAllEndpoints() {
+        connectionsClient.stopAllEndpoints()
+        stopDiscovering()
+        stopAdvertising()
+        discoveredDevices.clear()
+        pendingDevices.clear()
+        connectedDevices.clear()
     }
 
     private fun broadcastMessage(message: String) {
@@ -244,7 +283,7 @@ class NearbyConnectService : Service() {
 
     private fun broadcastConnectionStatus(isConnected: Boolean) {
         val intent = Intent("CONNECTION_STATUS")
-        intent.putExtra("IS_CONNECTED", isConnected)
+        intent.putExtra("IS_CONNECTED", connectedDevices.isNotEmpty())
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
     }
 
@@ -256,28 +295,31 @@ class NearbyConnectService : Service() {
 
     fun sendMessage(message: String) {
         println("connect catch sendMessage")
-        connectedEndpointId?.let {
             val payload = Payload.fromBytes(message.toByteArray(Charsets.UTF_8))
-            connectionsClient.sendPayload(it, payload)
+            connectionsClient.sendPayload(connectedDevices.keys.toList(), payload)
             messages.add(0, Pair(true, message))
-        }
     }
 
-    fun endChat() {
-       /* connectedEndpointIds.forEach { id ->
-            connectionsClient.disconnectFromEndpoint(id)
-        }
-        connectedEndpointIds.clear()*/
-        connectedEndpointId = null
+    fun disconnectFromAllEndpoints() {
+         connectedDevices.keys.forEach { id ->
+             connectionsClient.disconnectFromEndpoint(id)
+         }
+         connectedDevices.clear()
     }
 
     fun getMessages(): ArrayList<Pair<Boolean, String>> {
         return messages
     }
 
-
     companion object {
         var isServiceActive = false
         var userName = ""
+    }
+
+    private enum class State {
+        UNKNOWN,
+        DISCOVERING,
+        ADVERTISING,
+        CONNECTED
     }
 }

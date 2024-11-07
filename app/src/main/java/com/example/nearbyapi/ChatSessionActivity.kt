@@ -61,9 +61,7 @@ class ChatSessionActivity : AppCompatActivity() {
     private val messageReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             intent?.getStringExtra("MESSAGE")?.let { message ->
-                val list = ArrayList<Pair<Boolean, String>>()
-                list.add((Pair(false, message)))
-                viewModel.addSessionMessages(list)
+                viewModel.onReceivedMessage(message)
             }
 
             intent?.getStringExtra("TOAST")?.let { message ->
@@ -107,6 +105,11 @@ class ChatSessionActivity : AppCompatActivity() {
                 }
             }
         }
+        /*binding.scConnector.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) {
+                connectionService?.s
+            }
+        }*/
         viewModel = ViewModelProvider(this)[ChatViewModel::class.java]
 
         viewModel.sendMessage.observe(this) { msg ->
@@ -125,7 +128,6 @@ class ChatSessionActivity : AppCompatActivity() {
         })
         if (NearbyConnectService.userName.isNotEmpty()) {
             showChatScreen("1-")
-            connectionService?.run { viewModel.addSessionMessages(getMessages()) }
             bindService(
                 Intent(this, NearbyConnectService::class.java),
                 serviceConnection,
@@ -135,6 +137,7 @@ class ChatSessionActivity : AppCompatActivity() {
                 registerReceiver(connectionStatusReceiver, IntentFilter("CONNECTION_STATUS"))
                 registerReceiver(messageReceiver, IntentFilter("MESSAGE_RECEIVED"))
             }
+            connectionService?.run { viewModel.addSessionMessages(getMessages()) }
         }
     }
 
@@ -156,7 +159,7 @@ class ChatSessionActivity : AppCompatActivity() {
             .setPositiveButton(
                 "Yes"
             ) { _: DialogInterface?, _: Int ->  // The user confirmed, so we can accept the connection.
-                connectionService?.endChat()
+                connectionService?.disconnectFromAllEndpoints()
                 removeChatScreen()
             }
             .setNegativeButton(
