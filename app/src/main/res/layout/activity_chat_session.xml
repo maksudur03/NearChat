@@ -5,7 +5,6 @@
     android:id="@+id/main"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-
     tools:context=".ChatSessionActivity">
 
     <LinearLayout
@@ -24,6 +23,18 @@
             android:textSize="20sp"
             android:textStyle="bold"
             app:switchPadding="12dp"
+            app:thumbTint="@color/white"
+            app:trackTint="@color/bg_online_switcher" />
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/scConnector"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Connector"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            app:switchPadding="12dp"
+            android:layout_marginTop="12dp"
             app:thumbTint="@color/white"
             app:trackTint="@color/bg_online_switcher" />
 

@@ -55,7 +55,7 @@ class NearbyConnectService : Service() {
 
     private lateinit var connectionsClient: ConnectionsClient
     private val binder = NearbyBinder()
-    private var messages = ArrayList<Pair<Boolean, String>>()
+    private val messages = ArrayList<Pair<Boolean, String>>()
 
     inner class NearbyBinder : Binder() {
         fun getService(): NearbyConnectService = this@NearbyConnectService
@@ -268,8 +268,9 @@ class NearbyConnectService : Service() {
 
     private fun stopAllEndpoints() {
         connectionsClient.stopAllEndpoints()
-        stopDiscovering()
-        stopAdvertising()
+        isConnecting = false
+        isAdvertising = false
+        isDiscovering = false
         discoveredDevices.clear()
         pendingDevices.clear()
         connectedDevices.clear()

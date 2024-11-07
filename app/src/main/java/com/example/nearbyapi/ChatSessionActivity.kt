@@ -41,6 +41,11 @@ class ChatSessionActivity : AppCompatActivity() {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             val binder = service as NearbyConnectService.NearbyBinder
             connectionService = binder.getService()
+            if (NearbyConnectService.userName.isNotEmpty()) {
+                connectionService?.run {
+                    viewModel.addSessionMessages(getMessages())
+                }
+            }
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
@@ -137,7 +142,6 @@ class ChatSessionActivity : AppCompatActivity() {
                 registerReceiver(connectionStatusReceiver, IntentFilter("CONNECTION_STATUS"))
                 registerReceiver(messageReceiver, IntentFilter("MESSAGE_RECEIVED"))
             }
-            connectionService?.run { viewModel.addSessionMessages(getMessages()) }
         }
     }
 
