@@ -24,6 +24,7 @@ import androidx.core.view.isVisible
 import androidx.lifecycle.ViewModelProvider
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.example.nearbyapi.Utils.BG_NOTIFICATION_CHANNEL_ID
+import com.example.nearbyapi.Utils.hideSoftKeyboard
 import com.example.nearbyapi.databinding.ActivityChatSessionBinding
 
 class ChatSessionActivity : AppCompatActivity() {
@@ -65,12 +66,13 @@ class ChatSessionActivity : AppCompatActivity() {
 
     private val messageReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            intent?.getStringExtra("MESSAGE")?.let { message ->
-                viewModel.onReceivedMessage(message)
-            }
-
-            intent?.getStringExtra("TOAST")?.let { message ->
-                showMessage(message)
+            intent?.run {
+                getStringExtra("MESSAGE")?.let { msg ->
+                    viewModel.onReceivedMessage(Pair(getStringExtra("SENDER_NAME") ?: "Other", msg))
+                }
+                getStringExtra("TOAST")?.let { message ->
+                    showMessage(message)
+                }
             }
         }
     }
@@ -122,11 +124,7 @@ class ChatSessionActivity : AppCompatActivity() {
                 }
             }
         }
-        /*binding.scConnector.setOnCheckedChangeListener { _, isChecked ->
-            if (isChecked) {
-                connectionService?.s
-            }
-        }*/
+
         viewModel = ViewModelProvider(this)[ChatViewModel::class.java]
 
         viewModel.sendMessage.observe(this) { msg ->
@@ -187,9 +185,10 @@ class ChatSessionActivity : AppCompatActivity() {
     }
 
     private fun removeChatScreen() {
-        binding.scOnline.isChecked = false
+        binding.scConnector.isChecked = false
         viewModel.onSessionEnded()
         binding.flChatContainer.visibility = GONE
+        hideSoftKeyboard(this)
         showMessage("Chat Session Ended")
     }
 

@@ -18,7 +18,7 @@ import com.example.nearbyapi.databinding.FragmentChatBinding
 class ChatFragment : Fragment() {
 
     private var binding: FragmentChatBinding? = null
-    private var messages = ArrayList<Pair<Boolean, String>>()
+    private var messages = ArrayList<Pair<String?, String>>()
     private val adapter: ChatAdapter = ChatAdapter(messages)
     private lateinit var viewModel: ChatViewModel
 
@@ -44,7 +44,7 @@ class ChatFragment : Fragment() {
     private fun init() {
         viewModel = ViewModelProvider(requireActivity())[ChatViewModel::class.java]
         viewModel.receivedMessage.observe(requireActivity()) { msg ->
-            messages.add(0, Pair(false, msg))
+            messages.add(0, Pair(msg.first, msg.second))
             adapter.notifyDataSetChanged()
         }
 
@@ -72,7 +72,7 @@ class ChatFragment : Fragment() {
                 }
                 etMessage.setText("")
                 viewModel.sendMessage(message)
-                messages.add(0, Pair(true, message))
+                messages.add(0, Pair(null, message))
                 adapter.notifyDataSetChanged()
             }
         }

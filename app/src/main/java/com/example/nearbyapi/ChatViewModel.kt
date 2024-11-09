@@ -9,11 +9,11 @@ import androidx.lifecycle.ViewModel
  * @since 27/10/24.
  */
 class ChatViewModel : ViewModel() {
-    private val _receivedMessage = MutableLiveData<String>()
-    val receivedMessage: LiveData<String> get() = _receivedMessage
+    private val _receivedMessage = MutableLiveData<Pair<String?, String>>()
+    val receivedMessage: LiveData<Pair<String?, String>> get() = _receivedMessage
 
-    fun onReceivedMessage(msg: String) {
-        _receivedMessage.value = msg
+    fun onReceivedMessage(msgData: Pair<String?, String>) {
+        _receivedMessage.value = msgData
     }
 
     private val _sendMessage = MutableLiveData<String>()
@@ -37,10 +37,10 @@ class ChatViewModel : ViewModel() {
         _onSessionEnd.value = Unit
     }
 
-    private val _sessionMessages = MutableLiveData<ArrayList<Pair<Boolean, String>>>()
-    val sessionMessages: LiveData<ArrayList<Pair<Boolean, String>>> get() = _sessionMessages
+    private val _sessionMessages = MutableLiveData<ArrayList<Pair<String?, String>>>()
+    val sessionMessages: LiveData<ArrayList<Pair<String?, String>>> get() = _sessionMessages
 
-    fun addSessionMessages(msgList: ArrayList<Pair<Boolean, String>>) {
+    fun addSessionMessages(msgList: ArrayList<Pair<String?, String>>) {
         _sessionMessages.value = msgList
     }
 }

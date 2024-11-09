@@ -18,7 +18,7 @@ private const val VIEW_TYPE_MY_MESSAGE = 0
 private const val VIEW_TYPE_OPPONENT_MESSAGE = 1
 
 class ChatAdapter(
-    private val messages: ArrayList<Pair<Boolean, String>>,
+    private val messages: ArrayList<Pair<String?, String>>,
 ) : RecyclerView.Adapter<ChatViewHolder>() {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ChatViewHolder {
@@ -38,11 +38,13 @@ class ChatAdapter(
 
     override fun onBindViewHolder(holder: ChatViewHolder, position: Int) {
         holder.tvMessage.text = messages[position].second
-
+        messages[position].first?.let { senderName ->
+            holder.itemView.findViewById<TextView>(R.id.tvSenderName).text = senderName
+        }
     }
 
     override fun getItemViewType(position: Int): Int {
-        return if (messages[position].first) {
+        return if (messages[position].first == null) {
             VIEW_TYPE_MY_MESSAGE
         } else {
             VIEW_TYPE_OPPONENT_MESSAGE

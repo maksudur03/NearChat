@@ -5,11 +5,22 @@
     android:layout_height="wrap_content">
 
     <TextView
+        android:id="@+id/tvSenderName"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="22dp"
+        android:layout_marginTop="8dp"
+        android:textColor="@color/black"
+        android:textSize="12sp"
+        tools:text="Munif" />
+
+    <TextView
         android:id="@+id/tvMessage"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_below="@id/tvSenderName"
         android:layout_marginStart="20dp"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="2dp"
         android:layout_marginBottom="8dp"
         android:background="@drawable/bg_opponent_message"
         android:lineHeight="22dp"
@@ -18,8 +29,8 @@
         android:paddingTop="10dp"
         android:paddingRight="16dp"
         android:paddingBottom="10dp"
-        android:textColor="#000000"
+        android:textColor="@color/black"
         android:textSize="16sp"
-        tools:text="Where are you? I am waiting for youWhere are you? "/>
+        tools:text="Where are you? I am waiting for youWhere are you? " />
 
 </RelativeLayout>

@@ -54,7 +54,7 @@ class NearbyConnectService : Service() {
 
     private lateinit var connectionsClient: ConnectionsClient
     private val binder = NearbyBinder()
-    private val messages = ArrayList<Pair<Boolean, String>>()
+    private val messages = ArrayList<Pair<String?, String>>()
 
     inner class NearbyBinder : Binder() {
         fun getService(): NearbyConnectService = this@NearbyConnectService
@@ -66,9 +66,9 @@ class NearbyConnectService : Service() {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
         setState(DISCONNECTED)
         isServiceActive = false
+        super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder {
@@ -230,9 +230,12 @@ class NearbyConnectService : Service() {
     private val payloadCallback = object : PayloadCallback() {
         override fun onPayloadReceived(endpointId: String, payload: Payload) {
             println("connect catch onPayloadReceived")
-            val message = String(payload.asBytes() ?: ByteArray(0))
-            messages.add(0, Pair(false, message))
-            broadcastMessage(message)
+            val messageData = Pair(
+                connectedDevices[endpointId]?.name ?: "Other",
+                String(payload.asBytes() ?: ByteArray(0))
+            )
+            messages.add(0, messageData)
+            broadcastMessage(messageData)
         }
 
         override fun onPayloadTransferUpdate(endpointId: String, update: PayloadTransferUpdate) {
@@ -241,9 +244,11 @@ class NearbyConnectService : Service() {
     }
 
     private fun setState(newState: State) {
+        println("setState  old $state $newState")
         if (state == newState) {
             return
         }
+        state = newState
         when (newState) {
             DISCOVERING -> {
                 if (isAdvertising) {
@@ -276,9 +281,11 @@ class NearbyConnectService : Service() {
         pendingDevices.clear()
     }
 
-    private fun broadcastMessage(message: String) {
-        val intent = Intent("MESSAGE_RECEIVED")
-        intent.putExtra("MESSAGE", message)
+    private fun broadcastMessage(messageData: Pair<String?, String>) {
+        val intent = Intent("MESSAGE_RECEIVED").apply {
+            putExtra("SENDER_NAME", messageData.first)
+            putExtra("MESSAGE", messageData.second)
+        }
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
     }
 
@@ -302,7 +309,7 @@ class NearbyConnectService : Service() {
         println("connect catch sendMessage")
         val payload = Payload.fromBytes(message.toByteArray(Charsets.UTF_8))
         connectionsClient.sendPayload(connectedDevices.keys.toList(), payload)
-        messages.add(0, Pair(true, message))
+        messages.add(0, Pair(null, message))
     }
 
     private fun disconnectFromAllEndpoints() {
@@ -312,11 +319,12 @@ class NearbyConnectService : Service() {
         connectedDevices.clear()
     }
 
-    fun getMessages(): ArrayList<Pair<Boolean, String>> {
+    fun getMessages(): ArrayList<Pair<String?, String>> {
         return messages
     }
 
     fun endChat() {
+        messages.clear()
         setState(DISCOVERING)
     }
 

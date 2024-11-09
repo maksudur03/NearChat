@@ -6,6 +6,7 @@ import android.Manifest.permission.BLUETOOTH_ADVERTISE
 import android.Manifest.permission.BLUETOOTH_CONNECT
 import android.Manifest.permission.BLUETOOTH_SCAN
 import android.Manifest.permission.NEARBY_WIFI_DEVICES
+import android.Manifest.permission.POST_NOTIFICATIONS
 import android.content.pm.PackageManager.PERMISSION_GRANTED
 import android.os.Build
 import android.os.Build.VERSION.SDK_INT
@@ -31,7 +32,8 @@ class LandingActivity : AppCompatActivity() {
         BLUETOOTH_CONNECT,
         BLUETOOTH_ADVERTISE,
         BLUETOOTH_SCAN,
-        NEARBY_WIFI_DEVICES
+        NEARBY_WIFI_DEVICES,
+        POST_NOTIFICATIONS
     )
 
     private val requestPermissionLauncher =
