@@ -82,7 +82,8 @@ class ChatSessionActivity : AppCompatActivity() {
         createNotificationChannel()
         createLoadingDialog()
         userName = intent.getStringExtra(KEY_NAME) ?: ""
-
+        binding.scConnector.isEnabled = false
+        binding.tvName.text = userName
         binding.scOnline.isChecked = NearbyConnectService.isServiceActive
         binding.scOnline.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
@@ -98,8 +99,19 @@ class ChatSessionActivity : AppCompatActivity() {
                     registerReceiver(connectionStatusReceiver, IntentFilter("CONNECTION_STATUS"))
                     registerReceiver(messageReceiver, IntentFilter("MESSAGE_RECEIVED"))
                 }
+                binding.scConnector.isEnabled = true
+                binding.scConnector.setOnCheckedChangeListener { _, isChecked ->
+                    if (isChecked) {
+                        connectionService?.startAdvertising()
+                    } else {
+                        connectionService?.stopAdvertising()
+                    }
+                }
             } else {
                 binding.scOnline.text = "Offline"
+                binding.scConnector.isChecked = false
+                binding.scConnector.isEnabled = false
+                binding.scConnector.setOnCheckedChangeListener(null)
                 NearbyConnectService.userName = ""
                 availableDevices.clear()
                 stopService((Intent(this, NearbyConnectService::class.java)))
@@ -126,7 +138,7 @@ class ChatSessionActivity : AppCompatActivity() {
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                if (binding.flCategoriesContainer.isVisible) {
+                if (binding.flChatContainer.isVisible) {
                     dismissChatFragment()
                 }
             }
@@ -163,7 +175,7 @@ class ChatSessionActivity : AppCompatActivity() {
             .setPositiveButton(
                 "Yes"
             ) { _: DialogInterface?, _: Int ->  // The user confirmed, so we can accept the connection.
-                connectionService?.disconnectFromAllEndpoints()
+                connectionService?.endChat()
                 removeChatScreen()
             }
             .setNegativeButton(
@@ -175,8 +187,10 @@ class ChatSessionActivity : AppCompatActivity() {
     }
 
     private fun removeChatScreen() {
+        binding.scOnline.isChecked = false
         viewModel.onSessionEnded()
-        binding.flCategoriesContainer.visibility = GONE
+        binding.flChatContainer.visibility = GONE
+        showMessage("Chat Session Ended")
     }
 
     private fun showMessage(msg: String) {
@@ -188,9 +202,9 @@ class ChatSessionActivity : AppCompatActivity() {
     }
 
     private fun showChatScreen(opponentName: String) {
-        binding.flCategoriesContainer.visibility = VISIBLE
+        binding.flChatContainer.visibility = VISIBLE
         supportFragmentManager.beginTransaction()
-            .replace(R.id.flCategoriesContainer, ChatFragment.newInstance(opponentName))
+            .replace(R.id.flChatContainer, ChatFragment.newInstance(opponentName))
             .commit()
     }
 

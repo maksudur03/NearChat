@@ -16,8 +16,8 @@ import androidx.core.content.ContextCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.example.nearbyapi.NearbyConnectService.State.ADVERTISING
 import com.example.nearbyapi.NearbyConnectService.State.CONNECTED
+import com.example.nearbyapi.NearbyConnectService.State.DISCONNECTED
 import com.example.nearbyapi.NearbyConnectService.State.DISCOVERING
-import com.example.nearbyapi.NearbyConnectService.State.UNKNOWN
 import com.example.nearbyapi.Utils.BG_NOTIFICATION_CHANNEL_ID
 import com.example.nearbyapi.Utils.FOREGROUND_NOTIFICATION_REQUEST_CODE
 import com.example.nearbyapi.Utils.getNotificationUpdateCurrentFlags
@@ -33,7 +33,6 @@ import com.google.android.gms.nearby.connection.EndpointDiscoveryCallback
 import com.google.android.gms.nearby.connection.Payload
 import com.google.android.gms.nearby.connection.PayloadCallback
 import com.google.android.gms.nearby.connection.PayloadTransferUpdate
-import com.google.android.gms.nearby.connection.Strategy.P2P_CLUSTER
 import com.google.android.gms.nearby.connection.Strategy.P2P_STAR
 
 /**
@@ -42,7 +41,7 @@ import com.google.android.gms.nearby.connection.Strategy.P2P_STAR
  */
 class NearbyConnectService : Service() {
 
-    private var state = UNKNOWN
+    private var state = DISCONNECTED
     private val strategy = P2P_STAR
 
     private val discoveredDevices = HashMap<String, Endpoint>()
@@ -68,7 +67,7 @@ class NearbyConnectService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        setState(UNKNOWN)
+        setState(DISCONNECTED)
         isServiceActive = false
     }
 
@@ -117,7 +116,7 @@ class NearbyConnectService : Service() {
         }
     }
 
-    private fun startAdvertising() {
+    fun startAdvertising() {
         println("connect catch startAdvertising")
         isAdvertising = true
         val options = AdvertisingOptions.Builder().setStrategy(strategy).build()
@@ -141,17 +140,18 @@ class NearbyConnectService : Service() {
                 if (endpoint != null) {
                     connectedToEndpoint(endpoint)
                 }
-                broadcastConnectionStatus(true)
+                broadcastConnectionStatus()
             } else {
                 onConnectionFailed()
-                broadcastConnectionStatus(false)
+                broadcastConnectionStatus()
             }
         }
 
         override fun onDisconnected(endpointId: String) {
             println("connect catch onDisconnected")
-            connectedDevices.remove(endpointId)
+            val endpoint = connectedDevices.remove(endpointId)
             if (connectedDevices.isEmpty()) {
+                broadcastConnectionStatus(endpoint?.name ?: "")
                 setState(DISCOVERING)
             }
         }
@@ -169,7 +169,7 @@ class NearbyConnectService : Service() {
         setState(CONNECTED)
     }
 
-    private fun stopAdvertising() {
+    fun stopAdvertising() {
         isAdvertising = false
         connectionsClient.stopAdvertising()
     }
@@ -262,18 +262,18 @@ class NearbyConnectService : Service() {
             CONNECTED -> if (isDiscovering) {
                 stopDiscovering()
             }
-            UNKNOWN -> stopAllEndpoints()
+            DISCONNECTED -> stopAllEndpoints()
         }
     }
 
     private fun stopAllEndpoints() {
+        disconnectFromAllEndpoints()
         connectionsClient.stopAllEndpoints()
         isConnecting = false
-        isAdvertising = false
-        isDiscovering = false
+        stopAdvertising()
+        stopDiscovering()
         discoveredDevices.clear()
         pendingDevices.clear()
-        connectedDevices.clear()
     }
 
     private fun broadcastMessage(message: String) {
@@ -282,9 +282,13 @@ class NearbyConnectService : Service() {
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
     }
 
-    private fun broadcastConnectionStatus(isConnected: Boolean) {
-        val intent = Intent("CONNECTION_STATUS")
-        intent.putExtra("IS_CONNECTED", connectedDevices.isNotEmpty())
+    private fun broadcastConnectionStatus(disconnectedEndpoint: String = "") {
+        val intent = Intent("CONNECTION_STATUS").apply {
+            putExtra("IS_CONNECTED", connectedDevices.isNotEmpty())
+            if (disconnectedEndpoint.isNotEmpty()) {
+                putExtra("DISCONNECTED_ID", disconnectedEndpoint)
+            }
+        }
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
     }
 
@@ -296,20 +300,24 @@ class NearbyConnectService : Service() {
 
     fun sendMessage(message: String) {
         println("connect catch sendMessage")
-            val payload = Payload.fromBytes(message.toByteArray(Charsets.UTF_8))
-            connectionsClient.sendPayload(connectedDevices.keys.toList(), payload)
-            messages.add(0, Pair(true, message))
+        val payload = Payload.fromBytes(message.toByteArray(Charsets.UTF_8))
+        connectionsClient.sendPayload(connectedDevices.keys.toList(), payload)
+        messages.add(0, Pair(true, message))
     }
 
-    fun disconnectFromAllEndpoints() {
-         connectedDevices.keys.forEach { id ->
-             connectionsClient.disconnectFromEndpoint(id)
-         }
-         connectedDevices.clear()
+    private fun disconnectFromAllEndpoints() {
+        connectedDevices.keys.forEach { id ->
+            connectionsClient.disconnectFromEndpoint(id)
+        }
+        connectedDevices.clear()
     }
 
     fun getMessages(): ArrayList<Pair<Boolean, String>> {
         return messages
+    }
+
+    fun endChat() {
+        setState(DISCOVERING)
     }
 
     companion object {
@@ -317,8 +325,8 @@ class NearbyConnectService : Service() {
         var userName = ""
     }
 
-    private enum class State {
-        UNKNOWN,
+    enum class State {
+        DISCONNECTED,
         DISCOVERING,
         ADVERTISING,
         CONNECTED
